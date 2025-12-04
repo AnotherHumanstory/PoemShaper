@@ -5,7 +5,7 @@
 <title>Poem Shaper - Full Page Scroll</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  /* Basic page setup */
+  /* Page setup */
   body {
     margin: 0;
     padding: 0;
@@ -13,10 +13,10 @@
     font-family: 'Playfair Display', serif;
     display: flex;
     flex-direction: column;
-    overflow-y: scroll; /* allow page scrolling */
+    overflow-y: scroll; /* allow vertical page scrolling */
   }
 
-  /* Left-side scrollbar styling (WebKit) */
+  /* Left-side scrollbar (WebKit) */
   body::-webkit-scrollbar {
     width: 12px;
   }
@@ -61,11 +61,11 @@
 
   button:hover { background: #e89a87; }
 
-  /* Main layout: two columns */
+  /* Main layout */
   #mainArea {
     display: flex;
     flex-direction: row;
-    min-height: 100vh; /* ensure content fills viewport */
+    min-height: 100vh; /* ensures content fills viewport */
   }
 
   #wordList {
@@ -73,7 +73,7 @@
     background: #fff0e6;
     border-right: 2px solid #f0d9d0;
     padding: 5px;
-    /* remove internal scroll */
+    /* remove internal scrolling to allow page scroll */
   }
 
   .word-item {
@@ -97,8 +97,8 @@
     border: 2px solid #f0d9d0;
     border-radius: 12px;
     margin: 10px;
-    min-height: 600px; /* ensure canvas grows with content */
-    touch-action: none;
+    min-height: 600px;
+    /* removed touch-action:none to allow page scrolling */
   }
 
   .word {
@@ -250,21 +250,27 @@ canvas.addEventListener("touchstart", startAction,{passive:false});
 
 function startAction(e){
   const target=e.target,pos=getPos(e);
-  if(target.classList.contains("rotate-handle")){rotating=target.parentElement;e.preventDefault();return;}
-  if(target.classList.contains("resize-handle")){
-    resizing=target.parentElement;
-    initialFontSize=parseFloat(window.getComputedStyle(resizing).fontSize);
-    const rect=resizing.getBoundingClientRect();
-    initialDistance=e.touches?getDistance(e.touches[0],{clientX:rect.left,clientY:rect.top}):Math.hypot(pos.x-rect.left,pos.y-rect.top);
-    e.preventDefault();return;
-  }
+
   if(target.classList.contains("word")){
+    // Dragging word
     dragging=target;
     dragging.classList.add("dragging");
     const rect=dragging.getBoundingClientRect();
     offsetX=pos.x-rect.left; offsetY=pos.y-rect.top;
     e.preventDefault();
+  } 
+  else if(target.classList.contains("rotate-handle")){
+    rotating=target.parentElement;
+    e.preventDefault();
+  } 
+  else if(target.classList.contains("resize-handle")){
+    resizing=target.parentElement;
+    initialFontSize=parseFloat(window.getComputedStyle(resizing).fontSize);
+    const rect=resizing.getBoundingClientRect();
+    initialDistance=e.touches?getDistance(e.touches[0],{clientX:rect.left,clientY:rect.top}):Math.hypot(pos.x-rect.left,pos.y-rect.top);
+    e.preventDefault();
   }
+  // touching empty canvas area => do not preventDefault to allow page scroll
 }
 
 // Move / rotate / resize

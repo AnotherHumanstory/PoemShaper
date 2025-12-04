@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Poem Shaper - Full Page Scroll</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  /* Basic page setup */
+  body {
+    margin: 0;
+    padding: 0;
+    background: #fff8f3;
+    font-family: 'Playfair Display', serif;
+    display: flex;
+    flex-direction: column;
+    overflow-y: scroll; /* allow page scrolling */
+  }
+
+  /* Left-side scrollbar styling (WebKit) */
+  body::-webkit-scrollbar {
+    width: 12px;
+  }
+  body::-webkit-scrollbar-thumb {
+    background: #f6b2a4;
+    border-radius: 6px;
+  }
+  body::-webkit-scrollbar-track {
+    background: #fff0e6;
+  }
+
+  /* Top bar */
+  #topBar {
+    background: #fff0e6;
+    padding: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-bottom: 2px solid #f0d9d0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  #topBar h1 {
+    font-size: 18px;
+    margin: 0;
+    color: #4b2e2e;
+    text-align: center;
+    flex: 1;
+  }
+
+  button {
+    padding: 8px 12px;
+    border: none;
+    background: #f6b2a4;
+    color: #fff;
+    border-radius: 6px;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  button:hover { background: #e89a87; }
+
+  /* Main layout: two columns */
+  #mainArea {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh; /* ensure content fills viewport */
+  }
+
+  #wordList {
+    width: 120px;
+    background: #fff0e6;
+    border-right: 2px solid #f0d9d0;
+    padding: 5px;
+    /* remove internal scroll */
+  }
+
+  .word-item {
+    background: #f6b2a4;
+    color: #fff;
+    margin: 4px 0;
+    padding: 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .word-item:hover { background: #e89a87; }
+
+  #poemCanvas {
+    flex: 1;
+    position: relative;
+    background: #fffefc;
+    border: 2px solid #f0d9d0;
+    border-radius: 12px;
+    margin: 10px;
+    min-height: 600px; /* ensure canvas grows with content */
+    touch-action: none;
+  }
+
+  .word {
+    position: absolute;
+    display: inline-block;
+    user-select: none;
+    font-size: 16px;
+    color: #4b2e2e;
+    padding: 2px;
+    border-radius: 4px;
+    transition: transform 0.1s;
+  }
+
+  .word.dragging { z-index: 10; }
+
+  .rotate-handle {
+    width: 14px;
+    height: 14px;
+    background: #f6b2a4;
+    border-radius: 50%;
+    position: absolute;
+    top: -10px;
+    right: -10px;
+  }
+
+  .resize-handle {
+    width: 12px;
+    height: 12px;
+    background: #b0d6b6;
+    border-radius: 50%;
+    position: absolute;
+    bottom: -8px;
+    right: -8px;
+  }
+
+  .delete-handle {
+    width: 16px;
+    height: 16px;
+    background: #e89a87;
+    color: #fff;
+    border-radius: 50%;
+    font-size: 12px;
+    text-align: center;
+    line-height: 16px;
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    cursor: pointer;
+    z-index: 15;
+  }
+
+  .delete-handle:hover { background: #d55c4f; }
+</style>
+</head>
+<body>
+
+<div id="topBar">
+  <button id="resetBtn">Reset</button>
+  <h1>Shape Your Poem</h1>
+  <button id="snapshotBtn">Save Image</button>
+</div>
+
+<div id="mainArea">
+  <div id="wordList"></div>
+  <div id="poemCanvas"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+// Poem text
+const poemText = `THIS POEM SHALL SURVIVE ME
+but most importantly,
+it already survived you.
+I wrote it with nails,
+clawing paper,
+carving skin.
+I could see the last words peeking at me
+from between my legs;
+I just had to keep pushing,
+and life began again,
+just like it did
+after you left me—
+a used teabag,
+soaking sadly in the sink,
+strangled to spit out
+every drop of sweetness.
+This poem will not self-destruct,
+just like I did not
+after you used me.`;
+
+// Extract unique words
+const words = [...new Set(poemText.replace(/[.,;—]/g,'').split(/\s+/).map(w=>w.trim()).filter(w=>w.length>0))];
+
+const canvas = document.getElementById("poemCanvas");
+const wordList = document.getElementById("wordList");
+const resetBtn = document.getElementById("resetBtn");
+const snapshotBtn = document.getElementById("snapshotBtn");
+
+let dragging=null, rotating=null, resizing=null;
+let offsetX=0, offsetY=0, initialFontSize=0, initialDistance=0;
+
+// Initialize word list
+function initWordList() {
+  wordList.innerHTML = "";
+  words.forEach(w=>{
+    const div=document.createElement("div");
+    div.className="word-item";
+    div.textContent=w;
+    div.onclick=()=>addWordToCanvas(w);
+    wordList.appendChild(div);
+  });
+}
+
+// Add word to canvas
+function addWordToCanvas(text){
+  const word=document.createElement("span");
+  word.className="word";
+  word.textContent=text;
+  word.style.left="50px";
+  word.style.top="50px";
+
+  const rotateHandle=document.createElement("div");
+  rotateHandle.className="rotate-handle";
+  word.appendChild(rotateHandle);
+
+  const resizeHandle=document.createElement("div");
+  resizeHandle.className="resize-handle";
+  word.appendChild(resizeHandle);
+
+  const deleteBtn=document.createElement("div");
+  deleteBtn.className="delete-handle";
+  deleteBtn.textContent="×";
+  deleteBtn.onclick=e=>{
+    e.stopPropagation();
+    canvas.removeChild(word);
+  };
+  word.appendChild(deleteBtn);
+
+  canvas.appendChild(word);
+}
+
+// Helpers
+function getPos(e){return e.touches&&e.touches.length>0?{x:e.touches[0].clientX,y:e.touches[0].clientY}:{x:e.clientX,y:e.clientY};}
+function getDistance(t1,t2){return Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);}
+
+// Start action
+canvas.addEventListener("mousedown", startAction);
+canvas.addEventListener("touchstart", startAction,{passive:false});
+
+function startAction(e){
+  const target=e.target,pos=getPos(e);
+  if(target.classList.contains("rotate-handle")){rotating=target.parentElement;e.preventDefault();return;}
+  if(target.classList.contains("resize-handle")){
+    resizing=target.parentElement;
+    initialFontSize=parseFloat(window.getComputedStyle(resizing).fontSize);
+    const rect=resizing.getBoundingClientRect();
+    initialDistance=e.touches?getDistance(e.touches[0],{clientX:rect.left,clientY:rect.top}):Math.hypot(pos.x-rect.left,pos.y-rect.top);
+    e.preventDefault();return;
+  }
+  if(target.classList.contains("word")){
+    dragging=target;
+    dragging.classList.add("dragging");
+    const rect=dragging.getBoundingClientRect();
+    offsetX=pos.x-rect.left; offsetY=pos.y-rect.top;
+    e.preventDefault();
+  }
+}
+
+// Move / rotate / resize
+canvas.addEventListener("mousemove", doAction);
+canvas.addEventListener("touchmove", doAction,{passive:false});
+
+function doAction(e){
+  const pos=getPos(e);
+  const rect=canvas.getBoundingClientRect();
+  if(dragging){if(e.touches&&e.touches.length>1)return; dragging.style.left=(pos.x-rect.left-offsetX)+'px'; dragging.style.top=(pos.y-rect.top-offsetY)+'px'; e.preventDefault();}
+  if(rotating){if(e.touches&&e.touches.length>1)return; const rRect=rotating.getBoundingClientRect(); const cx=rRect.left+rRect.width/2; const cy=rRect.top+rRect.height/2; rotating.style.transform=`rotate(${Math.atan2(pos.y-cy,pos.x-cx)*180/Math.PI}deg)`; e.preventDefault();}
+  if(resizing){
+    if(e.touches&&e.touches.length>=2){const newDistance=getDistance(e.touches[0],e.touches[1]); let scaleFactor=newDistance/initialDistance; let newSize=initialFontSize*scaleFactor; newSize=Math.max(10,Math.min(80,newSize)); resizing.style.fontSize=newSize+'px';}
+    else {const rRect=resizing.getBoundingClientRect(); const currentDistance=Math.sqrt((pos.x-rRect.left)**2+(pos.y-rRect.top)**2); let scaleFactor=currentDistance/initialDistance; let newSize=initialFontSize*scaleFactor; newSize=Math.max(10,Math.min(80,newSize)); resizing.style.fontSize=newSize+'px';}
+    e.preventDefault();
+  }
+}
+
+// End action
+canvas.addEventListener("mouseup", endAction);
+canvas.addEventListener("mouseleave", endAction);
+canvas.addEventListener("touchend", endAction);
+function endAction(){if(dragging) dragging.classList.remove("dragging"); dragging=rotating=resizing=null;}
+
+// Reset & snapshot
+resetBtn.onclick=()=>{canvas.innerHTML=""; initWordList();};
+snapshotBtn.onclick=()=>{html2canvas(canvas).then(c=>{const link=document.createElement("a"); link.download="poem_shape.png"; link.href=c.toDataURL(); link.click();});};
+
+// Initialize
+initWordList();
+</script>
+</body>
+</html>
